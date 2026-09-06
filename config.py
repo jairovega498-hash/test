@@ -13,11 +13,11 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
     "proveedor": "openai",         # "openai" | "gemini"
-    "modelo": "gpt-4o-mini",       # cambia a "gemini-2.0-flash" para Gemini
+    "modelo": "gpt-4o-mini",       # cambia a "gemini-2.5-flash" para Gemini
     "api_key": "",                 # opcional si se usa OPENAI_API_KEY o GEMINI_API_KEY
     "intervalo_segundos": 8,        # cada cuánto captura y analiza
-    "max_ancho_px": 1280,           # resize de la captura antes de enviarla
-    "calidad_jpeg": 70,
+    "max_ancho_px": 896,            # resize de la captura antes de enviarla
+    "calidad_jpeg": 45,             # JPEG en escala de grises
     "max_resumen_chars": 800,       # tope del contexto acumulado antes de compactar
     "guardar_log": True,            # guarda historial de resúmenes en disco
     "solo_si_cambia": True,         # evita reanalizar si la pantalla no cambió
@@ -36,9 +36,15 @@ def cargar_config() -> dict:
         # Rellena claves faltantes con valores por defecto (por si se actualiza el agente)
         merged = dict(DEFAULT_CONFIG)
         merged.update(data)
-        if merged.get("proveedor", "").lower() not in {"openai", "gemini"}:
+        proveedor = str(merged.get("proveedor", "")).strip().lower()
+        modelo = str(merged.get("modelo", "")).strip().lower()
+        if proveedor not in {"openai", "gemini"}:
             merged["proveedor"] = DEFAULT_CONFIG["proveedor"]
             merged["modelo"] = DEFAULT_CONFIG["modelo"]
+        elif proveedor == "openai" and modelo.startswith("gemini"):
+            merged["modelo"] = "gpt-4o-mini"
+        elif proveedor == "gemini" and not modelo.startswith("gemini"):
+            merged["modelo"] = "gemini-2.5-flash"
         return merged
     except Exception:
         return dict(DEFAULT_CONFIG)

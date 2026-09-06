@@ -28,11 +28,26 @@ class ModeloVision(ABC):
         """Condensa texto puro (sin imagen) — usado para compactar el resumen acumulado."""
         ...
 
+    @abstractmethod
+    async def analizar_imagen_async(self, imagen_bytes: bytes, prompt: str, contexto: str = "") -> str:
+        """Versión cancelable del análisis de imagen."""
+        ...
+
+    @abstractmethod
+    async def compactar_texto_async(self, texto: str, prompt: str) -> str:
+        """Versión cancelable de la compactación."""
+        ...
+
+    async def cerrar_async(self):
+        """Cierra el cliente HTTP asíncrono si el proveedor lo expone."""
+
 
 class AdaptadorOpenAI(ModeloVision):
     def __init__(self, api_key, modelo="gpt-4o-mini", **_):
-        from openai import OpenAI
+        from openai import AsyncOpenAI, OpenAI
         self.client = OpenAI(api_key=api_key)
+        self._api_key = api_key
+        self.async_client = AsyncOpenAI(api_key=api_key)
         self.modelo = modelo
 
     def analizar_imagen(self, imagen_bytes, prompt, contexto=""):
@@ -58,20 +73,59 @@ class AdaptadorOpenAI(ModeloVision):
         )
         return resp.choices[0].message.content.strip()
 
+    async def analizar_imagen_async(self, imagen_bytes, prompt, contexto=""):
+        if self.async_client is None:
+            from openai import AsyncOpenAI
+            self.async_client = AsyncOpenAI(api_key=self._api_key)
+        b64 = base64.b64encode(imagen_bytes).decode()
+        resp = await self.async_client.chat.completions.create(
+            model=self.modelo,
+            messages=[
+                {"role": "system", "content": "Eres un asistente que resume contenido visual de forma breve y neutral."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": f"{contexto}\n\n{prompt}" if contexto else prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                ]},
+            ],
+            max_tokens=200,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    async def compactar_texto_async(self, texto, prompt):
+        resp = await self.async_client.chat.completions.create(
+            model=self.modelo,
+            messages=[{"role": "user", "content": f"{prompt}\n\n{texto}"}],
+            max_tokens=150,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    async def cerrar_async(self):
+        if self.async_client:
+            await self.async_client.close()
+            self.async_client = None
+
 
 class AdaptadorGemini(ModeloVision):
-    def __init__(self, api_key, modelo="gemini-2.0-flash", **_):
+    def __init__(self, api_key, modelo="gemini-2.5-flash", **_):
         from google import genai
         self.client = genai.Client(api_key=api_key)
+        self._api_key = api_key
         self.modelo = modelo
 
     def analizar_imagen(self, imagen_bytes, prompt, contexto=""):
         from google.genai import types
         contenido = f"{contexto}\n\n{prompt}" if contexto else prompt
-        resp = self.client.models.generate_content(
-            model=self.modelo,
-            contents=[contenido, types.Part.from_bytes(data=imagen_bytes, mime_type="image/jpeg")],
-        )
+        try:
+            resp = self.client.models.generate_content(
+                model=self.modelo,
+                contents=[contenido, types.Part.from_bytes(data=imagen_bytes, mime_type="image/jpeg")],
+            )
+        except Exception as error:
+            raise RuntimeError(
+                f"Error de Gemini con el modelo '{self.modelo}'. "
+                "Verifica que GEMINI_API_KEY esté configurada y que el modelo esté disponible. "
+                f"Detalle: {error}"
+            ) from error
         return (resp.text or "").strip()
 
     def compactar_texto(self, texto, prompt):
@@ -80,6 +134,37 @@ class AdaptadorGemini(ModeloVision):
             contents=f"{prompt}\n\n{texto}",
         )
         return (resp.text or "").strip()
+
+    async def analizar_imagen_async(self, imagen_bytes, prompt, contexto=""):
+        from google.genai import types
+        if self.client is None:
+            from google import genai
+            self.client = genai.Client(api_key=self._api_key)
+        contenido = f"{contexto}\n\n{prompt}" if contexto else prompt
+        try:
+            resp = await self.client.aio.models.generate_content(
+                model=self.modelo,
+                contents=[contenido, types.Part.from_bytes(data=imagen_bytes, mime_type="image/jpeg")],
+            )
+        except Exception as error:
+            raise RuntimeError(
+                f"Error de Gemini con el modelo '{self.modelo}'. "
+                "Verifica que GEMINI_API_KEY esté configurada y que el modelo esté disponible. "
+                f"Detalle: {error}"
+            ) from error
+        return (resp.text or "").strip()
+
+    async def compactar_texto_async(self, texto, prompt):
+        resp = await self.client.aio.models.generate_content(
+            model=self.modelo,
+            contents=f"{prompt}\n\n{texto}",
+        )
+        return (resp.text or "").strip()
+
+    async def cerrar_async(self):
+        if self.client:
+            await self.client.aio.aclose()
+            self.client = None
 
 
 def _cargar_keys() -> dict:
@@ -98,9 +183,9 @@ def _cargar_keys() -> dict:
 
 def _obtener_api_key(config: dict, proveedor: str) -> str:
     variable = "OPENAI_API_KEY" if proveedor == "openai" else "GEMINI_API_KEY"
-    api_key = _cargar_keys().get(variable, "").strip()
+    api_key = str(config.get("api_key", "")).strip()
     if not api_key:
-        api_key = str(config.get("api_key", "")).strip()
+        api_key = _cargar_keys().get(variable, "").strip()
     if not api_key:
         api_key = os.environ.get(variable, "").strip()
     if not api_key:

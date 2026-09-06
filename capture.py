@@ -1,15 +1,12 @@
-"""
-Captura de pantalla optimizada: resize + compresión JPEG,
-y detección de cambio de frame para evitar analizar pantallas repetidas.
-"""
+"""Captura del escritorio virtual y compresión JPEG en escala de grises."""
 import io
 import mss
-from PIL import Image, ImageChops
+from PIL import Image
 import numpy as np
 
 
 class Capturador:
-    def __init__(self, max_ancho=1280, calidad_jpeg=70):
+    def __init__(self, max_ancho=896, calidad_jpeg=45):
         self.max_ancho = max_ancho
         self.calidad_jpeg = calidad_jpeg
         self._ultimo_frame_gris = None
@@ -21,14 +18,20 @@ class Capturador:
             img = Image.frombytes("RGB", shot.size, shot.rgb)
         if self.max_ancho and img.width > self.max_ancho:
             ratio = self.max_ancho / img.width
-            img = img.resize((self.max_ancho, int(img.height * ratio)))
+            img = img.resize((self.max_ancho, int(img.height * ratio)), Image.Resampling.LANCZOS)
         return img
 
     def capturar_bytes(self) -> bytes:
         """Devuelve la captura actual como JPEG en bytes, lista para enviar al modelo."""
-        img = self._tomar_raw()
+        img = self._tomar_raw().convert("L")
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=self.calidad_jpeg)
+        img.save(
+            buf,
+            format="JPEG",
+            quality=self.calidad_jpeg,
+            optimize=True,
+            progressive=True,
+        )
         return buf.getvalue()
 
     def cambio_significativo(self, umbral=0.02) -> bool:

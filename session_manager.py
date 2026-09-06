@@ -7,11 +7,19 @@ from pathlib import Path
 from model_adapters import ModeloVision
 
 PROMPT_ANALISIS = (
-    "Observa esta captura de pantalla. Describe en 1-2 frases, de forma breve y neutral, "
-    "qué contenido o actividad relevante hay (documento, video, código, navegación web, etc.) "
-    "y qué cambió respecto al contexto previo si aplica. Si hay una pregunta de opción múltiple, "
-    "transcribe la pregunta y las opciones visibles, e indica la respuesta solo si puede inferirse "
-    "con seguridad. No inventes detalles que no veas."
+    "Analiza cuidadosamente la captura completa, pero céntrate exclusivamente en las preguntas "
+    "visibles y sus opciones de respuesta. Ignora barras de tareas, menús, ventanas ajenas, "
+    "notificaciones y cualquier contenido que no pertenezca a la pregunta. Busca una o varias "
+    "preguntas, incluidas preguntas de opción múltiple, y usa el texto y las imágenes asociadas "
+    "para resolverlas. "
+    "Devuelve exclusivamente este formato, sin introducción ni explicaciones adicionales:\n\n"
+    "EJEMPLO SALIDA(usalo como guía)--> Pregunta #1\n"
+    "EJEMPLO SALIDA(usalo como guía)--> Respuesta: A\n\n"
+    "EJEMPLO SALIDA(usalo como guía)--> Pregunta #2\n"
+    "EJEMPLO SALIDA(usalo como guía)--> Respuesta: A y C\n\n"
+    "Incluye tantas preguntas como existan. Usa la letra o letras de la opción correcta, por ejemplo "
+    "A, B, A y C, según corresponda. Si no puedes determinar una respuesta con seguridad, escribe "
+    "EJEMPLO SALIDA(usalo como guía)--> Respuesta: No determinada. No inventes preguntas, opciones ni respuestas."
 )
 
 PROMPT_COMPACTACION = (
@@ -37,6 +45,26 @@ class GestorSesion:
         self._registrar_log(nuevo_analisis)
         self._acumular_y_compactar(nuevo_analisis)
         return nuevo_analisis
+
+    async def procesar_ciclo_async(self, imagen_bytes: bytes) -> str:
+        nuevo_analisis = await self.modelo.analizar_imagen_async(
+            imagen_bytes, PROMPT_ANALISIS, contexto=self.resumen_actual
+        )
+        self._registrar_log(nuevo_analisis)
+        await self._acumular_y_compactar_async(nuevo_analisis)
+        return nuevo_analisis
+
+    async def _acumular_y_compactar_async(self, nuevo_analisis: str):
+        combinado = f"{self.resumen_actual}\n- {nuevo_analisis}".strip()
+        if len(combinado) > self.max_resumen_chars:
+            try:
+                self.resumen_actual = await self.modelo.compactar_texto_async(
+                    combinado, PROMPT_COMPACTACION
+                )
+            except Exception:
+                self.resumen_actual = combinado[-self.max_resumen_chars:]
+        else:
+            self.resumen_actual = combinado
 
     def _acumular_y_compactar(self, nuevo_analisis: str):
         combinado = f"{self.resumen_actual}\n- {nuevo_analisis}".strip()

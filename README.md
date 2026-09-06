@@ -1,11 +1,9 @@
-# Resumidor de Pantalla — Agente en bandeja del sistema
+# Resumidor de Pantalla — Widget flotante para Windows
 
-Agente para Windows que observa el escritorio periódicamente, genera un resumen breve
-de lo que ocurre (incluidas preguntas con opciones múltiples) usando un
-modelo de visión, y mantiene un contexto acumulado y compactado sin saturar la
-ventana de contexto del modelo. Funciona desde la bandeja del sistema, sin
-consola visible; el último resumen se puede consultar en el título del ícono y
-en el historial.
+Agente para Windows que captura el escritorio bajo demanda y analiza preguntas
+visibles en pantalla usando un modelo de visión. Presenta el resultado en un
+widget sin marco, siempre visible por encima de las demás ventanas y sin ícono
+en la bandeja del sistema.
 Analiza el escritorio virtual completo, incluyendo todas las pantallas conectadas.
 Es compatible con OpenAI y Gemini.
 
@@ -31,8 +29,8 @@ por defecto para OpenAI. Edítalo para elegir el proveedor:
   "modelo": "gpt-4o-mini",
   "api_key": "",
   "intervalo_segundos": 8,
-  "max_ancho_px": 1280,
-  "calidad_jpeg": 70,
+  "max_ancho_px": 896,
+  "calidad_jpeg": 45,
   "max_resumen_chars": 800,
   "guardar_log": true,
   "solo_si_cambia": true,
@@ -45,7 +43,7 @@ por defecto para OpenAI. Edítalo para elegir el proveedor:
 | proveedor | modelo (ejemplo) | requiere |
 |-----------|------------------|----------|
 | `openai`  | `gpt-4o-mini`    | `api_key` de OpenAI |
-| `gemini`  | `gemini-2.0-flash` | `api_key` de Google AI |
+| `gemini`  | `gemini-2.5-flash` | `api_key` de Google AI |
 
 Las dos librerías se instalan con `requirements.txt`. Para este modo de uso,
 escribe las claves en `keys.txt`, ubicado junto a `tray_app.py`:
@@ -90,27 +88,57 @@ Para quitarlo:
 python autostart_windows.py desactivar
 ```
 
+### Instalación automática
+
+Ejecuta `instalar.bat`. El script intenta instalar Python mediante `winget` si no
+está disponible, instala las dependencias, construye `dist\ResumidorPantalla.exe`
+y copia el ejecutable y `keys.txt` automáticamente al escritorio. Después
+completa las claves en el `keys.txt` del escritorio y abre
+`ResumidorPantalla.exe` con doble clic.
+
+Se requiere conexión a Internet durante la instalación. Si el PC no tiene
+`winget`, instala Python 3.11 o superior manualmente y vuelve a ejecutar el script.
+
 ## Uso
 
-- El ícono en la bandeja cambia de color: verde = activo, gris = sin cambios en
-  pantalla (no reanalizó), rojo = error.
-- Clic derecho → menú:
-  - **Pausar / Reanudar**: detiene la captura sin cerrar el agente.
-  - **Ver historial**: abre el log de resúmenes (`%APPDATA%\ResumidorPantalla\historial.log`).
-  - **Editar configuración**: abre `config.json`.
-  - **Salir**: cierra el agente.
+- El widget aparece sin bordes y permanece sobre las ventanas abiertas.
+- Presiona `Alt+Z` desde cualquier aplicación para capturar todas las pantallas. La imagen se
+  conserva completa para mantener el contexto, pero el análisis se centra únicamente en las
+  preguntas y sus opciones.
+- Pulsa **imagen capturada** para mostrar una vista previa.
+- La captura inicia automáticamente el análisis y también puedes pulsar **ANALIZAR**
+  para repetirlo.
+- Mientras se analiza aparece **CANCELAR**. Cancela la tarea asíncrona, cierra el
+  cliente HTTP del proveedor y permite reintentar sin conservar esa conexión.
+- Pulsa **CONFIG** en la parte inferior para editar desde la interfaz el proveedor,
+  modelo, API key y el resto de parámetros de `config.json`. Pulsa **GUARDAR** para
+  aplicar los cambios sin editar el archivo manualmente.
+- La respuesta se muestra con este formato:
+
+```text
+Pregunta #1
+Respuesta: A
+
+Pregunta #2
+Respuesta: A y C
+```
+
+La ventana se cierra con `Alt+F4`.
 
 ## Estructura del proyecto
 
 ```
 resumidor_pantalla/
-├── tray_app.py          # punto de entrada: bandeja + loop principal
-├── capture.py           # captura de pantalla + detección de cambios
+├── tray_app.py          # punto de entrada: widget + atajo global Alt+Z
+├── capture.py           # captura + escala de grises + compresión JPEG
 ├── model_adapters.py    # adaptadores por proveedor (OpenAI/Gemini)
 ├── session_manager.py   # acumulación y compactación del resumen/contexto
 ├── config.py            # config persistente en %APPDATA%
 ├── autostart_windows.py # registro en el inicio de sesión de Windows
 ├── build.bat            # empaquetado a .exe con PyInstaller
+├── instalar.bat         # instalación automática y empaquetado
+├── preparar_icono.py    # convierte icon.jpg a icon.ico para Windows
+├── icon.jpg             # icono de la aplicación
 └── requirements.txt
 ```
 
@@ -119,9 +147,8 @@ resumidor_pantalla/
 Este agente captura la pantalla de forma continua. Antes de instalarlo en un
 equipo (propio o de terceros):
 
-- Deja claro a cualquier otra persona que use el equipo que el agente está activo
-  (el ícono de bandeja ya cumple parte de esa función; considera además un aviso
-  visible si el equipo es compartido).
+- Deja claro a cualquier otra persona que use el equipo que el agente está activo;
+  el widget permanece visible, pero considera además un aviso si el equipo es compartido.
 - Cada captura se envía al proveedor en la nube seleccionado (OpenAI o Gemini); evita
   activarlo mientras haya contraseñas, datos bancarios u otra información sensible.
 - Revisa `historial.log` periódicamente si te preocupa qué se está registrando.
