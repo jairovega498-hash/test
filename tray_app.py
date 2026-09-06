@@ -17,9 +17,23 @@ from session_manager import GestorSesion
 
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
+HWND_TOPMOST = -1
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOACTIVATE = 0x0010
+SWP_SHOWWINDOW = 0x0040
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
+WDA_MONITOR = 0x00000001
 MOD_ALT = 0x0001
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+MOD_NOREPEAT = 0x4000
 VK_Z = 0x5A
+VK_S = 0x53
+VK_SNAPSHOT = 0x2C
 HOTKEY_ID = 1
+HOTKEY_CAPTURE_PRINTSCREEN = 2
+HOTKEY_CAPTURE_SNIPPING = 3
 
 
 class AgenteResumidor:
@@ -51,8 +65,37 @@ class AgenteResumidor:
         self.analisis_id = 0
         self.analisis_loop = None
         self.analisis_task = None
+        self.restaurar_id = None
         self._construir_widget()
         self._posicionar_widget()
+        self._excluir_de_capturas(self.root)
+        self.root.after_idle(lambda: self._excluir_de_capturas(self.root))
+        self.root.after(500, self._forzar_siempre_encima)
+
+    def _excluir_de_capturas(self, ventana):
+        ventana.update_idletasks()
+        user32 = ctypes.windll.user32
+        protegido = user32.SetWindowDisplayAffinity(
+            ventana.winfo_id(),
+            WDA_EXCLUDEFROMCAPTURE,
+        )
+        if not protegido:
+            user32.SetWindowDisplayAffinity(ventana.winfo_id(), WDA_MONITOR)
+
+    def _forzar_siempre_encima(self):
+        if not self.hotkey_activo or not self.root.winfo_exists():
+            return
+        self.root.attributes("-topmost", True)
+        ctypes.windll.user32.SetWindowPos(
+            self.root.winfo_id(),
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )
+        self.root.after(500, self._forzar_siempre_encima)
 
     def _construir_widget(self):
         contenedor = tk.Frame(
@@ -203,6 +246,7 @@ class AgenteResumidor:
         ventana.resizable(False, False)
         ventana.transient(self.root)
         ventana.grab_set()
+        self._excluir_de_capturas(ventana)
 
         campos = {}
         formulario = tk.Frame(ventana, bg="#ffffff", padx=16, pady=14)
@@ -417,11 +461,42 @@ class AgenteResumidor:
                 "No se pudo registrar Alt+Z. Puede estar siendo usado por otra aplicación.",
             ))
             return
+        user32.RegisterHotKey(
+            None, HOTKEY_CAPTURE_PRINTSCREEN, MOD_NOREPEAT, VK_SNAPSHOT
+        )
+        user32.RegisterHotKey(
+            None,
+            HOTKEY_CAPTURE_SNIPPING,
+            MOD_WIN | MOD_SHIFT | MOD_NOREPEAT,
+            VK_S,
+        )
         mensaje = wintypes.MSG()
         while self.hotkey_activo and user32.GetMessageW(ctypes.byref(mensaje), None, 0, 0) > 0:
             if mensaje.message == WM_HOTKEY and mensaje.wParam == HOTKEY_ID:
                 self.root.after(0, self._capturar)
+            elif mensaje.message == WM_HOTKEY and mensaje.wParam in {
+                HOTKEY_CAPTURE_PRINTSCREEN,
+                HOTKEY_CAPTURE_SNIPPING,
+            }:
+                self.root.after(0, self._ocultar_para_captura)
+        user32.UnregisterHotKey(None, HOTKEY_CAPTURE_PRINTSCREEN)
+        user32.UnregisterHotKey(None, HOTKEY_CAPTURE_SNIPPING)
         user32.UnregisterHotKey(None, HOTKEY_ID)
+
+    def _ocultar_para_captura(self):
+        if not self.root.winfo_viewable():
+            return
+        self.root.withdraw()
+        if self.restaurar_id:
+            self.root.after_cancel(self.restaurar_id)
+        self.restaurar_id = self.root.after(2500, self._restaurar_despues_de_captura)
+
+    def _restaurar_despues_de_captura(self):
+        self.restaurar_id = None
+        if self.hotkey_activo:
+            self.root.deiconify()
+            self.root.attributes("-topmost", True)
+            self._excluir_de_capturas(self.root)
 
     def iniciar(self):
         threading.Thread(target=self._escuchar_hotkey, daemon=True).start()
@@ -433,6 +508,8 @@ class AgenteResumidor:
 
     def _salir(self):
         self.hotkey_activo = False
+        if self.restaurar_id:
+            self.root.after_cancel(self.restaurar_id)
         if self.analisis_loop and self.analisis_task:
             self.analisis_loop.call_soon_threadsafe(self.analisis_task.cancel)
         if self.hotkey_thread_id:

@@ -101,7 +101,8 @@ Se requiere conexión a Internet durante la instalación. Si el PC no tiene
 
 ## Uso
 
-- El widget aparece sin bordes y permanece sobre las ventanas abiertas.
+- El widget aparece sin bordes y Windows lo mantiene como ventana superior sobre
+  aplicaciones normales, juegos en modo ventana y juegos sin bordes.
 - Presiona `Alt+Z` desde cualquier aplicación para capturar todas las pantallas. La imagen se
   conserva completa para mantener el contexto, pero el análisis se centra únicamente en las
   preguntas y sus opciones.
@@ -124,6 +125,19 @@ Respuesta: A y C
 ```
 
 La ventana se cierra con `Alt+F4`.
+
+Nota: un juego en modo pantalla completa exclusiva puede impedir que Windows
+muestre ventanas externas por encima. Para usar el widget sobre un juego,
+selecciona modo ventana o pantalla completa sin bordes.
+
+Por privacidad, el widget solicita a Windows `WDA_EXCLUDEFROMCAPTURE`: las
+capturas de pantalla, grabaciones y sesiones remotas compatibles no muestran
+la ventana. Esta protección depende del método de captura y no puede bloquear
+cámaras físicas, drivers de captura o herramientas con privilegios especiales.
+Además, el widget se oculta temporalmente al detectar `PrintScreen` o
+`Win+Shift+S` y vuelve a aparecer después de 2,5 segundos. Las herramientas de
+recorte que usan otros atajos o APIs no notifican su captura a las aplicaciones,
+por lo que no pueden detectarse universalmente.
 
 ## Estructura del proyecto
 
