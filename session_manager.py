@@ -3,6 +3,7 @@ Gestor de sesión: acumula resúmenes breves de cada ciclo y compacta el context
 cuando crece demasiado, para no saturar la ventana de contexto del modelo.
 """
 import datetime
+import re
 from pathlib import Path
 from model_adapters import ModeloVision
 
@@ -31,9 +32,10 @@ PROMPT_COMPACTACION = (
 
 class GestorSesion:
     def __init__(self, modelo: ModeloVision, max_resumen_chars=800,
-                 guardar_log=True, log_path: Path = None):
+                 max_preguntas_contexto=3, guardar_log=True, log_path: Path = None):
         self.modelo = modelo
         self.max_resumen_chars = max_resumen_chars
+        self.max_preguntas_contexto = max(1, int(max_preguntas_contexto))
         self.resumen_actual = ""
         self.guardar_log = guardar_log
         self.log_path = log_path
@@ -43,7 +45,7 @@ class GestorSesion:
             imagen_bytes, PROMPT_ANALISIS, contexto=self.resumen_actual
         )
         self._registrar_log(nuevo_analisis)
-        self._acumular_y_compactar(nuevo_analisis)
+        self._acumular_contexto(nuevo_analisis)
         return nuevo_analisis
 
     async def procesar_ciclo_async(self, imagen_bytes: bytes) -> str:
@@ -51,29 +53,17 @@ class GestorSesion:
             imagen_bytes, PROMPT_ANALISIS, contexto=self.resumen_actual
         )
         self._registrar_log(nuevo_analisis)
-        await self._acumular_y_compactar_async(nuevo_analisis)
+        self._acumular_contexto(nuevo_analisis)
         return nuevo_analisis
 
-    async def _acumular_y_compactar_async(self, nuevo_analisis: str):
-        combinado = f"{self.resumen_actual}\n- {nuevo_analisis}".strip()
-        if len(combinado) > self.max_resumen_chars:
-            try:
-                self.resumen_actual = await self.modelo.compactar_texto_async(
-                    combinado, PROMPT_COMPACTACION
-                )
-            except Exception:
-                self.resumen_actual = combinado[-self.max_resumen_chars:]
-        else:
-            self.resumen_actual = combinado
+    def _contar_preguntas(self, texto: str) -> int:
+        return len(re.findall(r"^\s*Pregunta\s*#\s*\d+", texto, flags=re.IGNORECASE | re.MULTILINE))
 
-    def _acumular_y_compactar(self, nuevo_analisis: str):
+    def _acumular_contexto(self, nuevo_analisis: str):
         combinado = f"{self.resumen_actual}\n- {nuevo_analisis}".strip()
-        if len(combinado) > self.max_resumen_chars:
-            try:
-                self.resumen_actual = self.modelo.compactar_texto(combinado, PROMPT_COMPACTACION)
-            except Exception:
-                # Si falla la compactación por IA, hace fallback a truncado simple
-                self.resumen_actual = combinado[-self.max_resumen_chars:]
+        preguntas = self._contar_preguntas(combinado)
+        if len(combinado) > self.max_resumen_chars or preguntas >= self.max_preguntas_contexto:
+            self.resumen_actual = ""
         else:
             self.resumen_actual = combinado
 

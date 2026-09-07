@@ -32,6 +32,7 @@ por defecto para OpenAI. Edítalo para elegir el proveedor:
   "max_ancho_px": 896,
   "calidad_jpeg": 45,
   "max_resumen_chars": 800,
+  "max_preguntas_contexto": 3,
   "guardar_log": true,
   "solo_si_cambia": true,
   "umbral_cambio": 0.02
@@ -114,6 +115,10 @@ Se requiere conexión a Internet durante la instalación. Si el PC no tiene
 - Pulsa **CONFIG** en la parte inferior para editar desde la interfaz el proveedor,
   modelo, API key y el resto de parámetros de `config.json`. Pulsa **GUARDAR** para
   aplicar los cambios sin editar el archivo manualmente.
+- El contexto conserva como máximo 3 preguntas. Al alcanzar ese límite se limpia
+  automáticamente y la siguiente captura comienza una ventana nueva. Si el texto
+  supera `max_resumen_chars`, también se reinicia sin hacer una llamada extra de
+  compactación.
 - La respuesta se muestra con este formato:
 
 ```text

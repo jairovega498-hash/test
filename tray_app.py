@@ -47,6 +47,7 @@ class AgenteResumidor:
         self.sesion = GestorSesion(
             modelo=self.modelo,
             max_resumen_chars=self.config["max_resumen_chars"],
+            max_preguntas_contexto=self.config["max_preguntas_contexto"],
             guardar_log=self.config["guardar_log"],
             log_path=CONFIG_DIR / "historial.log",
         )
@@ -282,6 +283,7 @@ class AgenteResumidor:
         agregar_campo("max_ancho_px", "Ancho máximo (px)")
         agregar_campo("calidad_jpeg", "Calidad JPEG")
         agregar_campo("max_resumen_chars", "Máximo resumen (chars)")
+        agregar_campo("max_preguntas_contexto", "Preguntas por contexto")
         agregar_campo("umbral_cambio", "Umbral de cambio")
 
         guardar_log_var = tk.BooleanVar(value=bool(self.config.get("guardar_log", True)))
@@ -306,6 +308,7 @@ class AgenteResumidor:
                     "max_ancho_px": int(campos["max_ancho_px"].get()),
                     "calidad_jpeg": int(campos["calidad_jpeg"].get()),
                     "max_resumen_chars": int(campos["max_resumen_chars"].get()),
+                    "max_preguntas_contexto": int(campos["max_preguntas_contexto"].get()),
                     "umbral_cambio": float(campos["umbral_cambio"].get()),
                     "guardar_log": guardar_log_var.get(),
                     "solo_si_cambia": solo_cambia_var.get(),
@@ -318,12 +321,16 @@ class AgenteResumidor:
                     raise ValueError("La calidad JPEG debe estar entre 1 y 95.")
                 if nueva_config["max_resumen_chars"] <= 0:
                     raise ValueError("El máximo del resumen debe ser mayor que cero.")
+                if nueva_config["max_preguntas_contexto"] <= 0:
+                    raise ValueError("Las preguntas por contexto deben ser mayores que cero.")
                 if not 0 <= nueva_config["umbral_cambio"] <= 1:
                     raise ValueError("El umbral debe estar entre 0 y 1.")
                 guardar_config(nueva_config)
                 self.config = cargar_config()
                 self.capturador.max_ancho = self.config["max_ancho_px"]
                 self.capturador.calidad_jpeg = self.config["calidad_jpeg"]
+                self.sesion.max_resumen_chars = self.config["max_resumen_chars"]
+                self.sesion.max_preguntas_contexto = self.config["max_preguntas_contexto"]
                 self.modelo = crear_adaptador(self.config)
                 self.sesion.modelo = self.modelo
                 ventana.destroy()

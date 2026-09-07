@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "max_ancho_px": 896,            # resize de la captura antes de enviarla
     "calidad_jpeg": 45,             # JPEG en escala de grises
     "max_resumen_chars": 800,       # tope del contexto acumulado antes de compactar
+    "max_preguntas_contexto": 3,    # preguntas máximas antes de iniciar una ventana nueva
     "guardar_log": True,            # guarda historial de resúmenes en disco
     "solo_si_cambia": True,         # evita reanalizar si la pantalla no cambió
     "umbral_cambio": 0.02           # % mínimo de diferencia entre frames para reanalizar

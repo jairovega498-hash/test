@@ -68,6 +68,9 @@ El análisis se centra en las preguntas y opciones visibles, ignorando contenido
 - **CONFIG**: abre la configuración completa.
 - **SALIR**: cierra la aplicación después de confirmar `¿Está seguro?`.
 
+La aplicación conserva como máximo tres preguntas en cada ventana de contexto.
+Después inicia automáticamente una ventana nueva.
+
 El panel de respuesta tiene desplazamiento vertical para leer respuestas largas.
 
 ## 5. Ventana flotante
