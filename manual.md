@@ -4,10 +4,11 @@
 
 1. Abre `ResumidorPantalla.exe`.
 2. Coloca en pantalla la pregunta que quieres analizar.
-3. Pulsa `Alt+Z` para capturar la pantalla.
-4. Espera a que termine el análisis automático.
-5. Lee la respuesta en el panel del widget. Usa el desplazamiento si es larga.
-6. Pulsa **SALIR** y confirma cuando quieras cerrar la aplicación.
+3. Pulsa `Alt+Z` o el botón de cámara `📷` para capturar la pantalla.
+4. El widget desaparece brevemente y vuelve a aparecer en el mismo lugar.
+5. Espera a que termine el análisis automático.
+6. Lee la respuesta en el panel del widget. Usa el desplazamiento si es larga.
+7. Pulsa **SALIR** y confirma cuando quieras cerrar la aplicación.
 
 ## 1. Instalación
 
@@ -31,6 +32,7 @@ Pulsa el botón **CONFIG** del widget. Desde ahí puedes modificar:
 - Proveedor: `openai` o `gemini`.
 - Modelo.
 - API key.
+- Protección contra capturas.
 - Calidad y tamaño de la imagen.
 - Historial y demás opciones disponibles.
 
@@ -49,10 +51,14 @@ GEMINI_API_KEY=tu-clave-de-gemini
 
 La API key guardada desde **CONFIG** tiene prioridad sobre `keys.txt`.
 
+La opción **Protección contra capturas** usa una API nativa de Windows para
+excluir el widget de mecanismos compatibles. El resultado se registra en
+`%APPDATA%\ResumidorPantalla\app.log`.
+
 ## 3. Capturar y analizar
 
 1. Abre la aplicación.
-2. Pulsa `Alt+Z` desde cualquier aplicación.
+2. Pulsa `Alt+Z` o el botón de cámara `📷`.
 3. Se capturará el escritorio virtual completo.
 4. La imagen se comprime y se convierte a escala de grises.
 5. El análisis comienza automáticamente.

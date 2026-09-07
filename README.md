@@ -33,6 +33,7 @@ por defecto para OpenAI. Edítalo para elegir el proveedor:
   "calidad_jpeg": 45,
   "max_resumen_chars": 800,
   "max_preguntas_contexto": 3,
+  "proteccion_capturas": true,
   "guardar_log": true,
   "solo_si_cambia": true,
   "umbral_cambio": 0.02
@@ -104,9 +105,11 @@ Se requiere conexión a Internet durante la instalación. Si el PC no tiene
 
 - El widget aparece sin bordes y Windows lo mantiene como ventana superior sobre
   aplicaciones normales, juegos en modo ventana y juegos sin bordes.
-- Presiona `Alt+Z` desde cualquier aplicación para capturar todas las pantallas. La imagen se
+- Presiona `Alt+Z` o pulsa el botón de cámara `📷` para capturar todas las pantallas. La imagen se
   conserva completa para mantener el contexto, pero el análisis se centra únicamente en las
   preguntas y sus opciones.
+- Antes de capturar, el widget desaparece brevemente para no incluirse en la imagen. Después
+  reaparece exactamente en la misma posición y comienza el análisis.
 - Pulsa **imagen capturada** para mostrar una vista previa.
 - La captura inicia automáticamente el análisis y también puedes pulsar **ANALIZAR**
   para repetirlo.
@@ -115,6 +118,9 @@ Se requiere conexión a Internet durante la instalación. Si el PC no tiene
 - Pulsa **CONFIG** en la parte inferior para editar desde la interfaz el proveedor,
   modelo, API key y el resto de parámetros de `config.json`. Pulsa **GUARDAR** para
   aplicar los cambios sin editar el archivo manualmente.
+- **Protección contra capturas** activa `WDA_EXCLUDEFROMCAPTURE` sobre la ventana
+  principal y el diálogo CONFIG. El resultado y el estado se registran en
+  `%APPDATA%\ResumidorPantalla\app.log`.
 - El contexto conserva como máximo 3 preguntas. Al alcanzar ese límite se limpia
   automáticamente y la siguiente captura comienza una ventana nueva. Si el texto
   supera `max_resumen_chars`, también se reinicia sin hacer una llamada extra de

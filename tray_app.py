@@ -1,6 +1,7 @@
 """Widget flotante para capturar y analizar la pantalla con Alt+Z."""
 import ctypes
 import asyncio
+import logging
 import threading
 import tkinter as tk
 from ctypes import wintypes
@@ -11,6 +12,7 @@ from PIL import Image, ImageTk
 
 from capture import Capturador
 from config import CONFIG_DIR, cargar_config, guardar_config
+from capture_protection import set_capture_protection
 from model_adapters import crear_adaptador
 from session_manager import GestorSesion
 
@@ -34,6 +36,14 @@ VK_SNAPSHOT = 0x2C
 HOTKEY_ID = 1
 HOTKEY_CAPTURE_PRINTSCREEN = 2
 HOTKEY_CAPTURE_SNIPPING = 3
+
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    filename=CONFIG_DIR / "app.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 class AgenteResumidor:
@@ -67,24 +77,22 @@ class AgenteResumidor:
         self.analisis_loop = None
         self.analisis_task = None
         self.restaurar_id = None
+        self.captura_oculta = False
         self._construir_widget()
         self._posicionar_widget()
-        self._excluir_de_capturas(self.root)
-        self.root.after_idle(lambda: self._excluir_de_capturas(self.root))
+        self._aplicar_proteccion(self.root)
+        self.root.after_idle(lambda: self._aplicar_proteccion(self.root))
         self.root.after(500, self._forzar_siempre_encima)
 
-    def _excluir_de_capturas(self, ventana):
+    def _aplicar_proteccion(self, ventana):
         ventana.update_idletasks()
-        user32 = ctypes.windll.user32
-        protegido = user32.SetWindowDisplayAffinity(
-            ventana.winfo_id(),
-            WDA_EXCLUDEFROMCAPTURE,
-        )
-        if not protegido:
-            user32.SetWindowDisplayAffinity(ventana.winfo_id(), WDA_MONITOR)
+        if self.config.get("proteccion_capturas", True):
+            set_capture_protection(ventana.winfo_id(), True)
+        else:
+            set_capture_protection(ventana.winfo_id(), False)
 
     def _forzar_siempre_encima(self):
-        if not self.hotkey_activo or not self.root.winfo_exists():
+        if not self.hotkey_activo or self.captura_oculta or not self.root.winfo_exists():
             return
         self.root.attributes("-topmost", True)
         ctypes.windll.user32.SetWindowPos(
@@ -103,7 +111,7 @@ class AgenteResumidor:
             self.root,
             bg="#ffffff",
             padx=10,
-            pady=9,
+            pady=5,
             highlightbackground="#b8b8b8",
             highlightcolor="#b8b8b8",
             highlightthickness=1,
@@ -115,12 +123,29 @@ class AgenteResumidor:
 
         self.etiqueta_estado = tk.Label(
             controles,
-            text="Alt+Z para capturar",
+            text="Alt+Z o cámara",
             bg="#ffffff",
             fg="#111111",
             font=("Segoe UI", 9),
         )
         self.etiqueta_estado.pack(side="left", padx=(0, 7))
+
+        self.boton_capturar = tk.Button(
+            controles,
+            text="📷",
+            command=self._capturar,
+            bg="#eeeeee",
+            fg="#111111",
+            activebackground="#dddddd",
+            activeforeground="#111111",
+            relief="solid",
+            bd=1,
+            padx=7,
+            pady=1,
+            font=("Segoe UI Emoji", 11),
+        )
+        self.boton_capturar.pack(side="left", padx=(0, 6))
+        self._agregar_hover(self.boton_capturar, "#eeeeee", "#d8d8d8")
 
         self.boton_imagen = tk.Button(
             controles,
@@ -133,10 +158,11 @@ class AgenteResumidor:
             activeforeground="#111111",
             relief="flat",
             padx=7,
-            pady=4,
+            pady=1,
             font=("Segoe UI", 9),
         )
         self.boton_imagen.pack(side="left", padx=(0, 6))
+        self._agregar_hover(self.boton_imagen, "#f0f0f0", "#dedede")
 
         self.boton_analizar = tk.Button(
             controles,
@@ -149,10 +175,11 @@ class AgenteResumidor:
             activeforeground="#111111",
             relief="flat",
             padx=10,
-            pady=4,
+            pady=1,
             font=("Segoe UI", 9, "bold"),
         )
         self.boton_analizar.pack(side="left")
+        self._agregar_hover(self.boton_analizar, "#8fd3a8", "#75bf91")
 
         self.boton_cancelar = tk.Button(
             controles,
@@ -166,18 +193,19 @@ class AgenteResumidor:
             relief="solid",
             bd=1,
             padx=8,
-            pady=4,
+            pady=1,
             font=("Segoe UI", 9),
         )
         self.boton_cancelar.pack(side="left", padx=(6, 0))
         self.boton_cancelar.pack_forget()
+        self._agregar_hover(self.boton_cancelar, "#ffffff", "#eeeeee")
 
         panel_respuesta = tk.Frame(contenedor, bg="#ffffff")
-        panel_respuesta.pack(fill="both", expand=True, pady=(5, 0))
+        panel_respuesta.pack(fill="both", expand=True, pady=(3, 0))
 
         self.etiqueta_respuesta = tk.Text(
             panel_respuesta,
-            height=5,
+            height=3,
             width=48,
             wrap="word",
             state="disabled",
@@ -189,7 +217,7 @@ class AgenteResumidor:
             highlightthickness=0,
             font=("Segoe UI", 10),
             padx=6,
-            pady=5,
+            pady=3,
         )
         self.etiqueta_respuesta.pack(side="left", fill="both", expand=True)
 
@@ -202,7 +230,7 @@ class AgenteResumidor:
         self.etiqueta_respuesta.configure(yscrollcommand=barra_respuesta.set)
 
         pie = tk.Frame(contenedor, bg="#ffffff")
-        pie.pack(fill="x", pady=(7, 0))
+        pie.pack(fill="x", pady=(4, 0))
 
         self.boton_config = tk.Button(
             pie,
@@ -215,10 +243,11 @@ class AgenteResumidor:
             relief="solid",
             bd=1,
             padx=9,
-            pady=4,
+            pady=2,
             font=("Segoe UI", 9),
         )
         self.boton_config.pack(side="left")
+        self._agregar_hover(self.boton_config, "#eeeeee", "#dddddd")
 
         self.boton_salir = tk.Button(
             pie,
@@ -231,14 +260,19 @@ class AgenteResumidor:
             relief="solid",
             bd=1,
             padx=9,
-            pady=4,
+            pady=2,
             font=("Segoe UI", 9),
         )
         self.boton_salir.pack(side="right")
+        self._agregar_hover(self.boton_salir, "#f3b4b4", "#e79d9d")
 
         for widget in (contenedor, controles, self.etiqueta_estado, panel_respuesta, pie):
             widget.bind("<Button-1>", self._iniciar_arrastre)
             widget.bind("<B1-Motion>", self._arrastrar)
+
+    def _agregar_hover(self, boton, color_normal, color_hover):
+        boton.bind("<Enter>", lambda _evento: boton.config(bg=color_hover))
+        boton.bind("<Leave>", lambda _evento: boton.config(bg=color_normal))
 
     def _abrir_configuracion(self):
         ventana = tk.Toplevel(self.root)
@@ -247,7 +281,7 @@ class AgenteResumidor:
         ventana.resizable(False, False)
         ventana.transient(self.root)
         ventana.grab_set()
-        self._excluir_de_capturas(ventana)
+        self._aplicar_proteccion(ventana)
 
         campos = {}
         formulario = tk.Frame(ventana, bg="#ffffff", padx=16, pady=14)
@@ -288,12 +322,19 @@ class AgenteResumidor:
 
         guardar_log_var = tk.BooleanVar(value=bool(self.config.get("guardar_log", True)))
         solo_cambia_var = tk.BooleanVar(value=bool(self.config.get("solo_si_cambia", True)))
+        proteccion_capturas_var = tk.BooleanVar(
+            value=bool(self.config.get("proteccion_capturas", True))
+        )
         tk.Checkbutton(
             formulario, text="Guardar historial", variable=guardar_log_var,
             bg="#ffffff", fg="#111111", activebackground="#ffffff",
         ).pack(anchor="w", pady=(5, 0))
         tk.Checkbutton(
             formulario, text="Usar solo si cambia la pantalla", variable=solo_cambia_var,
+            bg="#ffffff", fg="#111111", activebackground="#ffffff",
+        ).pack(anchor="w")
+        tk.Checkbutton(
+            formulario, text="Protección contra capturas", variable=proteccion_capturas_var,
             bg="#ffffff", fg="#111111", activebackground="#ffffff",
         ).pack(anchor="w")
 
@@ -312,6 +353,7 @@ class AgenteResumidor:
                     "umbral_cambio": float(campos["umbral_cambio"].get()),
                     "guardar_log": guardar_log_var.get(),
                     "solo_si_cambia": solo_cambia_var.get(),
+                    "proteccion_capturas": proteccion_capturas_var.get(),
                 })
                 if not nueva_config["modelo"]:
                     raise ValueError("El modelo no puede estar vacío.")
@@ -331,6 +373,7 @@ class AgenteResumidor:
                 self.capturador.calidad_jpeg = self.config["calidad_jpeg"]
                 self.sesion.max_resumen_chars = self.config["max_resumen_chars"]
                 self.sesion.max_preguntas_contexto = self.config["max_preguntas_contexto"]
+                self._aplicar_proteccion(self.root)
                 self.modelo = crear_adaptador(self.config)
                 self.sesion.modelo = self.modelo
                 ventana.destroy()
@@ -340,16 +383,20 @@ class AgenteResumidor:
 
         botones = tk.Frame(formulario, bg="#ffffff")
         botones.pack(fill="x", pady=(12, 0))
-        tk.Button(
+        boton_guardar = tk.Button(
             botones, text="GUARDAR", command=guardar_desde_formulario,
             bg="#8fd3a8", fg="#111111", relief="solid", bd=1,
-            padx=10, pady=4, font=("Segoe UI", 9, "bold"),
-        ).pack(side="right")
-        tk.Button(
+            padx=10, pady=2, font=("Segoe UI", 9, "bold"),
+        )
+        boton_guardar.pack(side="right")
+        self._agregar_hover(boton_guardar, "#8fd3a8", "#75bf91")
+        boton_cancelar_config = tk.Button(
             botones, text="CANCELAR", command=ventana.destroy,
             bg="#eeeeee", fg="#111111", relief="solid", bd=1,
-            padx=8, pady=4, font=("Segoe UI", 9),
-        ).pack(side="right", padx=(0, 6))
+            padx=8, pady=2, font=("Segoe UI", 9),
+        )
+        boton_cancelar_config.pack(side="right", padx=(0, 6))
+        self._agregar_hover(boton_cancelar_config, "#eeeeee", "#dddddd")
 
     def _establecer_respuesta(self, texto, color="#111111"):
         self.etiqueta_respuesta.config(state="normal", fg=color)
@@ -361,7 +408,7 @@ class AgenteResumidor:
     def _posicionar_widget(self):
         self.root.update_idletasks()
         ancho = 420
-        alto = max(145, self.root.winfo_reqheight())
+        alto = max(102, self.root.winfo_reqheight())
         x = (self.root.winfo_screenwidth() - ancho) // 2
         y = self.root.winfo_screenheight() - alto - 35
         self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
@@ -376,14 +423,35 @@ class AgenteResumidor:
         self.root.geometry(f"+{x}+{y}")
 
     def _capturar(self):
+        if self.captura_oculta:
+            return
+        self.captura_oculta = True
+        self.boton_capturar.config(state="disabled")
+        self.boton_imagen.config(state="disabled")
+        self.boton_analizar.config(state="disabled")
+        self.etiqueta_estado.config(text="Capturando...")
+        self.root.withdraw()
+        self.root.after(150, self._capturar_con_widget_oculto)
+
+    def _capturar_con_widget_oculto(self):
         try:
             self.imagen_bytes = self.capturador.capturar_bytes()
+            self.root.deiconify()
+            self.root.attributes("-topmost", True)
+            self._aplicar_proteccion(self.root)
+            self.captura_oculta = False
+            self.boton_capturar.config(state="normal")
             self.boton_imagen.config(state="normal")
             self.boton_analizar.config(state="normal")
             self.etiqueta_estado.config(text="Captura lista")
             self._establecer_respuesta("")
             self._analizar()
         except Exception as error:
+            self.root.deiconify()
+            self.root.attributes("-topmost", True)
+            self._aplicar_proteccion(self.root)
+            self.captura_oculta = False
+            self.boton_capturar.config(state="normal")
             self.etiqueta_estado.config(text="Error al capturar")
             self._establecer_respuesta(str(error), "#b00020")
 
@@ -503,7 +571,7 @@ class AgenteResumidor:
         if self.hotkey_activo:
             self.root.deiconify()
             self.root.attributes("-topmost", True)
-            self._excluir_de_capturas(self.root)
+            self._aplicar_proteccion(self.root)
 
     def iniciar(self):
         threading.Thread(target=self._escuchar_hotkey, daemon=True).start()
